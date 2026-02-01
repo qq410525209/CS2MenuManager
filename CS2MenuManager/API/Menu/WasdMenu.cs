@@ -83,6 +83,9 @@ public class WasdMenuInstance : BaseMenuInstance
         };
 
         Player.SaveSpeed(ref OldVelocityModifier);
+        
+        // 恢复之前保存的状态（如果存在）
+        RestoreMenuState();
     }
 
     /// <summary>
@@ -150,6 +153,9 @@ public class WasdMenuInstance : BaseMenuInstance
     /// </summary>
     public override void Close(bool exitSound)
     {
+        // 在关闭前保存当前状态
+        SaveMenuState();
+        
         base.Close(exitSound);
         Menu.Plugin.RemoveListener<OnTick>(OnTick);
 
@@ -212,6 +218,9 @@ public class WasdMenuInstance : BaseMenuInstance
         if (!string.IsNullOrEmpty(Config.Sound.Select))
             Player.ExecuteClientCommand($"play {Config.Sound.Select}");
 
+        // 在选择选项前保存当前状态
+        SaveMenuState();
+        
         HandleSelectAction(option);
     }
 
@@ -254,4 +263,63 @@ public class WasdMenuInstance : BaseMenuInstance
         if (!string.IsNullOrEmpty(Config.Sound.ScrollUp))
             Player.ExecuteClientCommand($"play {Config.Sound.ScrollUp}");
     }
+    
+    /// <summary>
+    /// 保存当前菜单状态（页码、偏移量、选中的选项和页码偏移栈）
+    /// </summary>
+    private void SaveMenuState()
+    {
+        // 使用静态字典保存每个玩家的菜单状态
+        if (!MenuStateStorage.ContainsKey(Player.SteamID))
+        {
+            MenuStateStorage[Player.SteamID] = new Dictionary<string, MenuState>();
+        }
+        
+        // 使用菜单标题作为键，保存该菜单的状态
+        MenuStateStorage[Player.SteamID][Menu.Title] = new MenuState
+        {
+            Page = Page,
+            CurrentOffset = CurrentOffset,
+            CurrentChoiceIndex = CurrentChoiceIndex,
+            PrevPageOffsets = new Stack<int>(PrevPageOffsets) // 创建栈的副本
+        };
+    }
+    
+    /// <summary>
+    /// 恢复之前保存的菜单状态（页码、偏移量、选中的选项和页码偏移栈）
+    /// </summary>
+    private void RestoreMenuState()
+    {
+        if (MenuStateStorage.ContainsKey(Player.SteamID) && 
+            MenuStateStorage[Player.SteamID].ContainsKey(Menu.Title))
+        {
+            MenuState state = MenuStateStorage[Player.SteamID][Menu.Title];
+            Page = state.Page;
+            CurrentOffset = state.CurrentOffset;
+            CurrentChoiceIndex = state.CurrentChoiceIndex;
+            
+            // 恢复页码偏移栈
+            PrevPageOffsets.Clear();
+            foreach (int offset in state.PrevPageOffsets)
+            {
+                PrevPageOffsets.Push(offset);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// 菜单状态类，用于保存菜单的页码、偏移量、选中的选项和页码偏移栈
+    /// </summary>
+    private class MenuState
+    {
+        public int Page { get; set; }
+        public int CurrentOffset { get; set; }
+        public int CurrentChoiceIndex { get; set; }
+        public Stack<int> PrevPageOffsets { get; set; } = new Stack<int>();
+    }
+    
+    /// <summary>
+    /// 静态字典，用于存储所有玩家的菜单状态
+    /// </summary>
+    private static readonly Dictionary<ulong, Dictionary<string, MenuState>> MenuStateStorage = new();
 }
